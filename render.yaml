@@ -1,0 +1,34 @@
+# Render blueprint: one free web service. State lives in memory, so keep a single instance.
+# Free instances sleep after ~15 idle minutes; the bot pings its own /v1/healthz every
+# SELF_PING_INTERVAL_S seconds using RENDER_EXTERNAL_URL (set by Render automatically), so it
+# stays awake. SELF_PING_URL overrides that URL if you front the service with a custom domain.
+services:
+  - type: web
+    name: vera-bot
+    runtime: python
+    plan: free
+    region: singapore
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn bot:app --host 0.0.0.0 --port $PORT --workers 1
+    healthCheckPath: /v1/healthz
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: LOG_LEVEL
+        value: INFO
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: CONTACT_EMAIL
+        sync: false
+      - key: TEAM_NAME
+        sync: false
+      - key: TEAM_MEMBERS
+        sync: false
+      # Optional: public base URL for the keepalive ping (defaults to RENDER_EXTERNAL_URL).
+      - key: SELF_PING_URL
+        sync: false
+      - key: SELF_PING_INTERVAL_S
+        value: "600"

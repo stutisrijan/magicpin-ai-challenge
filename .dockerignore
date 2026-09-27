@@ -1,0 +1,35 @@
+# Keep the image to what the service needs: app/, bot.py, requirements.txt (+ dataset/ and
+# scripts/ so submission.jsonl can be regenerated inside the container if ever needed).
+.venv/
+venv/
+.git/
+.gitignore
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+tests/
+expanded/
+**/expanded/
+.env
+.env.*
+!.env.example
+*.log
+submission.jsonl
+
+# challenge docs and the local judge are not needed at runtime
+examples/
+challenge-brief.md
+challenge-testing-brief.md
+engagement-design.md
+engagement-research.md
+judge_simulator.py
+
+# deploy descriptors
+Dockerfile
+.dockerignore
+fly.toml
+render.yaml
