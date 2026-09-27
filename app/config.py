@@ -52,11 +52,11 @@ class Settings:
     llm_disabled: bool = field(default_factory=lambda: _env_bool("LLM_DISABLED", False))
 
     gemini_api_key: str = field(default_factory=lambda: _env("GEMINI_API_KEY", _env("GOOGLE_API_KEY", "")))
-    gemini_models: list[str] = field(default_factory=lambda: _env_list("GEMINI_MODELS", "gemini-2.5-flash,gemini-2.5-flash-lite,gemini-2.0-flash"))
+    gemini_models: list[str] = field(default_factory=lambda: _env_list("GEMINI_MODELS", "gemini-flash-latest,gemini-flash-lite-latest,gemini-3.5-flash-lite"))
     gemini_rpm: int = field(default_factory=lambda: _env_int("GEMINI_RPM", 10))
 
     groq_api_key: str = field(default_factory=lambda: _env("GROQ_API_KEY", ""))
-    groq_model: str = field(default_factory=lambda: _env("GROQ_MODEL", "llama-3.3-70b-versatile"))
+    groq_model: str = field(default_factory=lambda: _env("GROQ_MODEL", "openai/gpt-oss-120b,qwen/qwen3.8-27b"))
     groq_rpm: int = field(default_factory=lambda: _env_int("GROQ_RPM", 30))
 
     openai_api_key: str = field(default_factory=lambda: _env("OPENAI_API_KEY", ""))

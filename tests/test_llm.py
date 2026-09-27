@@ -237,10 +237,10 @@ async def test_gemini_happy_path_request_shape():
 
 
 @pytest.mark.asyncio
-async def test_gemini_no_thinking_config_for_non_25_models_and_json_hint_without_schema():
+async def test_gemini_thinking_off_for_any_model_and_json_hint_without_schema():
     def gemini(request):
         body = json.loads(request.content)
-        assert "thinkingConfig" not in body["generationConfig"]
+        assert body["generationConfig"]["thinkingConfig"] == {"thinkingBudget": 0}
         assert "responseSchema" not in body["generationConfig"]
         assert "JSON" in body["systemInstruction"]["parts"][0]["text"]
         return gemini_ok('{"ok": 1}')
@@ -291,7 +291,38 @@ async def test_gemini_thinking_config_rejected_retries_without_it_and_remembers(
     client = make_client(Recorder(gemini=gemini), gemini_api_key=GEMINI_KEY, gemini_models=["gemini-2.5-flash"])
     assert await client.complete_json("s", "u1") == {"ok": 1}
     assert await client.complete_json("s", "u2") == {"ok": 1}
-    assert seen == [True, False, False]
+    # budget 0 rejected, then thinkingLevel rejected, then no config; the next call remembers
+    assert seen == [True, True, False, False]
+
+
+@pytest.mark.asyncio
+async def test_gemini_bare_invalid_argument_steps_to_thinking_level_and_remembers():
+    seen: list[dict | None] = []
+
+    def gemini(request):
+        cfg = json.loads(request.content)["generationConfig"].get("thinkingConfig")
+        seen.append(cfg)
+        if cfg == {"thinkingBudget": 0}:
+            return httpx.Response(400, json={"error": {"code": 400, "message": "Request contains an invalid argument.",
+                                                       "status": "INVALID_ARGUMENT"}})
+        return gemini_ok('{"ok": 1}')
+
+    client = make_client(Recorder(gemini=gemini), gemini_api_key=GEMINI_KEY, gemini_models=["gemini-flash-lite-latest"])
+    assert await client.complete_json("s", "u1") == {"ok": 1}
+    assert await client.complete_json("s", "u2") == {"ok": 1}
+    assert seen == [{"thinkingBudget": 0}, {"thinkingLevel": "low"}, {"thinkingLevel": "low"}]
+
+
+@pytest.mark.asyncio
+async def test_groq_gpt_oss_sends_low_reasoning_effort():
+    def groq(request):
+        body = json.loads(request.content)
+        assert body["reasoning_effort"] == "low"
+        return httpx.Response(200, json={"choices": [{"message": {"content": '{"ok": 3}'}}]})
+
+    client = make_client(Recorder(groq=groq), groq_api_key=GROQ_KEY, groq_model="openai/gpt-oss-120b",
+                         llm_providers=["groq"])
+    assert await client.complete_json("s", "u") == {"ok": 3}
 
 
 @pytest.mark.asyncio

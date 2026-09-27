@@ -526,7 +526,7 @@ class LLMClient:
             if not key:
                 continue
             if name == "gemini":
-                models = _split_models(getattr(s, "gemini_models", None) or ["gemini-2.5-flash"])
+                models = _split_models(getattr(s, "gemini_models", None) or ["gemini-flash-latest"])
             else:
                 models = _split_models(getattr(s, f"{name}_model", ""))
             if not models:
@@ -856,22 +856,21 @@ class LLMClient:
                            max_tokens: int, temperature: float, attempt_deadline: float) -> _Outcome:
         g_schema = gemini_schema(schema)
         active = {
-            "thinking": "2.5" in model and self._feature_on(prov, model, "thinking"),
             "schema": g_schema is not None and self._feature_on(prov, model, "schema"),
             "safety": self._feature_on(prov, model, "safety"),
         }
-        keywords = {"thinking": ("thinking",),
-                    "schema": ("response_schema", "responseschema", "schema", "propertyordering"),
+        keywords = {"schema": ("response_schema", "responseschema", "schema", "propertyordering"),
                     "safety": ("safety",)}
+        think = self._thinking_mode(prov, model)
         url = GEMINI_URL.format(model=model)
         headers = {"x-goog-api-key": prov.key, "content-type": "application/json"}
         outcome = _Outcome("bad_request", detail="no attempt made")
-        for _ in range(4):
+        for _ in range(5):
             sys_text = system if active["schema"] else f"{system.rstrip()}\n\n{_json_hint(schema)}"
             gen: dict[str, Any] = {"temperature": temperature, "maxOutputTokens": max_tokens,
                                    "responseMimeType": "application/json"}
-            if active["thinking"]:
-                gen["thinkingConfig"] = {"thinkingBudget": 0}
+            if think:
+                gen["thinkingConfig"] = think[1]
             if active["schema"]:
                 gen["responseSchema"] = g_schema
             body: dict[str, Any] = {
@@ -885,13 +884,32 @@ class LLMClient:
             if resp.status_code == 200:
                 return self._parse_gemini(resp)
             if resp.status_code == 400:
-                feature = self._rejected_feature(_error_message(resp), active, keywords)
+                message = _error_message(resp)
+                feature = self._rejected_feature(message, active, keywords)
                 if feature:
                     active[feature] = False
                     self._drop_feature(prov, model, feature)
                     continue
+                # Some models reject a thinking setting with a bare "invalid argument": step down the cascade.
+                low = message.lower()
+                if think and ("thinking" in low or "invalid argument" in low):
+                    self._drop_feature(prov, model, think[0])
+                    think = self._thinking_mode(prov, model)
+                    continue
             return self._classify(prov, resp)
         return outcome
+
+    # Thinking off first (fastest), then the low level (models that refuse a zero budget), then no config.
+    _THINKING_MODES: tuple[tuple[str, dict[str, Any]], ...] = (
+        ("thinking_budget", {"thinkingBudget": 0}),
+        ("thinking_level", {"thinkingLevel": "low"}),
+    )
+
+    def _thinking_mode(self, prov: _Provider, model: str) -> tuple[str, dict[str, Any]] | None:
+        for name, cfg in self._THINKING_MODES:
+            if self._feature_on(prov, model, name):
+                return name, cfg
+        return None
 
     @staticmethod
     def _parse_gemini(resp: httpx.Response) -> _Outcome:
@@ -930,10 +948,12 @@ class LLMClient:
             "response_format": self._feature_on(prov, model, "response_format"),
             "max_tokens": self._feature_on(prov, model, "max_tokens"),     # off => max_completion_tokens
             "temperature": self._feature_on(prov, model, "temperature"),
+            "reasoning": "gpt-oss" in model and self._feature_on(prov, model, "reasoning"),
         }
         keywords = {"response_format": ("response_format", "json_object", "json mode", "response format"),
                     "max_tokens": ("max_completion_tokens",),
-                    "temperature": ("temperature",)}
+                    "temperature": ("temperature",),
+                    "reasoning": ("reasoning_effort", "reasoning")}
         sys_text = f"{system.rstrip()}\n\n{_json_hint(schema)}"
         outcome = _Outcome("bad_request", detail="no attempt made")
         for _ in range(4):
@@ -946,6 +966,8 @@ class LLMClient:
                 body["temperature"] = temperature
             if active["response_format"]:
                 body["response_format"] = {"type": "json_object"}
+            if active["reasoning"]:
+                body["reasoning_effort"] = "low"
             resp = await self._post(url, headers, body, attempt_deadline)
             if resp.status_code == 200:
                 return self._parse_openai(resp)
