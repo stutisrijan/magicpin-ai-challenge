@@ -48,6 +48,8 @@ Environment variables (all optional; see `.env.example`): `GEMINI_API_KEY` (free
 
 Deploy anywhere that gives you a public URL. Keep it to a single instance.
 
+**Branches:** `main` is production. Render deploys it automatically on every merge. Work on feature branches and merge to `main` only outside the judging window, because a redeploy wipes the bot's in-memory state.
+
 - **Render:** `render.yaml` blueprint. On the free plan the bot pings itself so the service doesn't go to sleep.
 - **Docker:** `Dockerfile` (reads `$PORT`).
 - **Fly.io:** `fly.toml`, with the machine set to always on.

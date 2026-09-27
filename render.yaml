@@ -11,6 +11,9 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn bot:app --host 0.0.0.0 --port $PORT --workers 1
     healthCheckPath: /v1/healthz
+    # Production tracks main: every push/merge to main redeploys (which wipes in-memory state,
+    # so never merge during a judging window). Work happens on feature branches.
+    branch: main
     autoDeploy: true
     envVars:
       - key: PYTHON_VERSION
